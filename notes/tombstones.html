@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tombstones overwhelming a read — Cassandra Runbook</title>
+  <meta name="description" content="How to confirm a Cassandra read is scanning tombstones, find the query and table, and decide between a narrower read, compaction, and a data-model fix.">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../index.html">Cassandra <span>Runbook</span></a>
+    <nav>
+      <a href="../index.html">Notes</a>
+      <a href="repair-or-replace-address.html">Repair or replace-address</a>
+      <a href="index-not-available.html">Index not available</a>
+      <a href="tombstones.html">Tombstones</a>
+    </nav>
+  </header>
+  <main>
+    <p class="meta">NOTE 03 · READ PATH</p>
+    <h1>Tombstones overwhelming a read</h1>
+    <p class="lede">The table is up. The query is not. Cassandra had to walk a large number of deletion markers to return a small result, and it stopped or warned before the read finished. This shows up on every supported version. The log line changes slightly. The decision does not.</p>
+
+    <h2>The log</h2>
+    <pre><code>Read 12 live rows and 104382 tombstone cells for query
+SELECT ... FROM keyspace_name.table_name WHERE ...
+(see tombstone_warn_threshold)</code></pre>
+    <p>A harder failure is <code>TombstoneOverwhelmingException</code>, or a client <code>ReadTimeout</code> whose server log shows the same scan. The warn threshold is a count of tombstone cells scanned, not a count of deleted partitions. Default warn is often 1000. Default failure is often 100000. Raising either number does not make the read cheap.</p>
+
+    <h2>What it means</h2>
+    <p>A tombstone is a marker that a cell, row, or range was deleted or that a TTL expired. Cassandra must read those markers to avoid returning data that should be gone. They are dropped later, at compaction, and only after <code>gc_grace_seconds</code> if repair is how you protect a delete. Until then every read of that slice pays for them.</p>
+    <p>The usual writers are TTLs on queue-shaped tables, inserts of nulls, collection overwrites, range deletes, and a query that reads a whole partition to find a few live rows.</p>
+
+    <h2>Confirm the query, then the table</h2>
+    <ol>
+      <li>Take the statement from the log. Note the keyspace, table, partition key, and how wide the slice is. A read of one partition with no clustering bound is the usual offender.</li>
+      <li>Find which replica logged it. The client timeout names a coordinator. The tombstone count is on the replica that scanned. Check <code>system.log</code> on the replicas for that token, not only the coordinator.</li>
+      <li>Reproduce at <code>LOCAL_ONE</code> from <code>cqlsh</code> on that replica, with the same bounds the application used. If a narrow slice returns quickly and the unbound partition does not, the partition is the problem.</li>
+      <li>Turn on tracing for one attempt if the log does not name the table. Do not leave tracing on. One traced read is enough.</li>
+    </ol>
+    <pre><code>CONSISTENCY LOCAL_ONE;
+TRACING ON;
+SELECT ... FROM keyspace_name.table_name WHERE pk = ...;</code></pre>
+
+    <h2>See how bad the table is</h2>
+    <p>On the replica that logged the scan:</p>
+    <pre><code>nodetool tablestats keyspace_name.table_name</code></pre>
+    <p>Older versions call this <code>cfstats</code>. Look at maximum tombstones per slice, droppable tombstone ratio, and average live cells. A high droppable ratio means compaction can reclaim them. A low ratio means they are inside <code>gc_grace_seconds</code> and a compaction will not delete them yet.</p>
+    <p>SSTable metadata tells you whether a few files hold the scan. <code>sstablemetadata</code> on the largest files for that table shows estimated droppable tombstones and the deletion time. You want the files the read actually opens, not a cluster-wide average.</p>
+
+    <h2>Fix, in this order</h2>
+    <table>
+      <thead>
+        <tr><th>What you found</th><th>What to do</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>The query reads a whole partition to return a few rows</td><td>Bound it. Add the clustering column, or page a narrow range. This is the fix that helps today, before any compaction.</td></tr>
+        <tr><td>Droppable tombstone ratio is high on that table</td><td>Compact the table on the replica that scanned. Prefer a compaction of that table over a major compaction of the node. Then re-run the read.</td></tr>
+        <tr><td>Most tombstones are not yet droppable</td><td>Compaction will not save the read. Stop the writer, or narrow the query, and wait out <code>gc_grace_seconds</code> unless you already understand the repair consequence of lowering it.</td></tr>
+        <tr><td>The writer inserts nulls, overwrites collections, or deletes by range</td><td>Fix the write. A null is a tombstone. Replacing a collection deletes the old cells. The read path cannot undo that.</td></tr>
+        <tr><td>A TTL table is read long after the rows expired</td><td>Stop reading expired slices. Time-window compaction only helps if the table is actually using it and old windows are dropping.</td></tr>
+      </tbody>
+    </table>
+    <p><code>nodetool garbagecollect</code> on that table is the narrower reclaim when you need tombstones gone from SSTables that compaction is not visiting. It is still a local disk operation. Run it on the replica that failed the read, then confirm with the same <code>LOCAL_ONE</code> query.</p>
+
+    <h2>Done when</h2>
+    <p>The application statement returns without a tombstone warning on the replicas that previously logged one. <code>tablestats</code> moving is not the same thing. The read is.</p>
+
+    <h2>Do not</h2>
+    <ul>
+      <li>Raise <code>tombstone_failure_threshold</code> and call it fixed. The read still scans the markers. You only moved the point where Cassandra gives up.</li>
+      <li>Run a full repair because a read saw tombstones. Repair can spread the markers to replicas that did not have them.</li>
+      <li>Lower <code>gc_grace_seconds</code> on a table you repair, unless you accept that a missed repair can resurrect deleted data.</li>
+      <li>Major-compact every table on the node. Compact the table the log named.</li>
+      <li>Paste the raw query, key, or application name into a public note.</li>
+    </ul>
+
+    <p class="note">Thresholds and the stats command differ by version. Cassandra 3.x uses <code>cfstats</code>. Later versions use <code>tablestats</code>. Confirm the failure threshold in <code>cassandra.yaml</code> on the version you run. This is a decision aid, not a procedure for a specific cluster.</p>
+    <p><a href="../index.html">Back to notes</a></p>
+  </main>
+  <footer>
+    <p>Independent operator notes. Not affiliated with the Apache Software Foundation or DataStax.</p>
+  </footer>
+</body>
+</html>
