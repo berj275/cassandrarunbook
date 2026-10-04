@@ -11,31 +11,29 @@
   <header>
     <a class="brand" href="../index.html">Cassandra <span>Runbook</span></a>
     <nav>
-      <a href="../index.html">Notes</a>
-      <a href="repair-or-replace-address.html">Repair or replace-address</a>
-      <a href="index-not-available.html">Index not available</a>
+      <a href="../index.html">All notes</a>
     </nav>
   </header>
   <main>
     <p class="meta">NOTE 02 · STORAGE-ATTACHED INDEX</p>
     <h1>ReadFailure: INDEX_NOT_AVAILABLE</h1>
-    <p class="lede">A query that uses a storage-attached index failed because a replica could not serve that index. This is not proof the table is down. The coordinator asked one node for index results and that node refused.</p>
+    <p class="lede">A query that uses a storage-attached index failed because a replica could not serve that index. This is not a Solr error, and it is not proof the table is down. The coordinator asked one node for index results and that node refused.</p>
 
     <h2>The error</h2>
     <pre><code>ReadFailure: received 0 responses and 1 failures
 (INDEX_NOT_AVAILABLE=[/10.1.2.21])
 error_code_map: {'10.1.2.21': '0x0002'}</code></pre>
-    <p><code>0x0002</code> is <code>INDEX_NOT_AVAILABLE</code>. The address is the replica that failed the indexed read. The query was using an SAI index. A plain primary-key read against the same table does not take this path.</p>
+    <p><code>0x0002</code> is <code>INDEX_NOT_AVAILABLE</code>. The address is the replica that failed the indexed read. Anonymize it in tickets and notes. The query was using an SAI index. A plain primary-key read against the same table does not take this path.</p>
 
     <h2>What a local check is for</h2>
-    <p>The client error names one coordinator's failure. It does not tell you how many replicas have a bad index. Connect to each node and run the same query using a consistency of <code>LOCAL_ONE</code>. That consistency level needs one replica in the local datacenter, and the node you connected to is the coordinator, so a failure stays on that node instead of being masked by a healthy replica.</p>
+    <p>The client error names one coordinator's failure. It does not tell you how many replicas have a bad index. Connect to each node and run the same query at <code>LOCAL_ONE</code>. That consistency level needs one replica in the local datacenter, and the node you connected to is the coordinator, so a failure stays on that node instead of being masked by a healthy replica.</p>
     <p>One success does not clear the datacenter. In a six-node cluster, three nodes in each of two datacenters, the failure can sit in a single datacenter: two of the three nodes refuse the indexed read, and the third returns rows. The other datacenter can be clean. A client using <code>LOCAL_QUORUM</code> will keep hitting the bad pair whenever the coordinator is in the bad datacenter.</p>
 
     <h2>Reproduce it</h2>
     <ol>
       <li>Take the application statement that failed. Keep the SAI predicate. Do not rewrite it as a primary-key read.</li>
       <li>From a shell on each node, open <code>cqlsh</code> against that node. Running it through another host defeats the check.</li>
-      <li>Set the consistency to <code>LOCAL_ONE</code>, then run the query:</li>
+      <li>Set the consistency, then run the query:</li>
     </ol>
     <pre><code>CONSISTENCY LOCAL_ONE;
 SELECT ... FROM keyspace_name.table_name WHERE indexed_column = ...;</code></pre>
@@ -54,10 +52,11 @@ WHERE keyspace_name = 'keyspace_name' AND table_name = 'table_name';</code></pre
     <p>One node at a time if the table is large. The rebuild reads local SSTables and writes a new index. Watch compaction and disk. When a node finishes, repeat the <code>LOCAL_ONE</code> query on that node before you start the next.</p>
 
     <h2>Done when</h2>
-    <p>Every node that previously failed now returns rows at <code>LOCAL_ONE</code>. Then run the original client statement at the consistency the application uses. A retry before the rebuild finishes fails the same way. Remember, the base table was still readable by primary key the whole time.</p>
+    <p>Every node that previously failed now returns rows at <code>LOCAL_ONE</code>. Then run the original client statement at the consistency the application uses. A retry before the rebuild finishes fails the same way. The base table was still readable by primary key the whole time.</p>
 
     <h2>Do not</h2>
     <ul>
+      <li>Treat this as a Solr or search-core outage. There is no core to reload.</li>
       <li>Run <code>nodetool repair</code> to fix an SAI index. Repair reconciles table data. <code>rebuild_index</code> rebuilds the index files on that node.</li>
       <li>Rebuild the healthy datacenter because one datacenter failed.</li>
       <li>Raise the consistency level to get past it. A stricter read still needs replicas whose index can answer.</li>
