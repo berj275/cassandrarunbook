@@ -66,7 +66,7 @@ SELECT ... FROM keyspace_name.table_name WHERE pk = ...;</code></pre>
 
     <h2>Done when</h2>
     <p>This incident is done when the application statement returns without a tombstone warning on the replicas that previously logged one. <code>tablestats</code> moving is not the same thing. The read is.</p>
-    <p>The problem is done only if the writes stop producing markers faster than compaction can drop them. A table with steady insert-and-delete churn will fail the same query again after the next wave. Operator steps buy time. They do not replace a design that deletes rows a read still has to scan. Say that in the ticket. Otherwise AppDev will treat a successful compaction as a permanent fix.</p>
+    <p>The problem is done only if the writes stop producing markers faster than compaction can drop them. A table with steady insert-and-delete churn will fail the same query again after the next wave. Operator steps buy time. They do not replace a design that deletes rows a read still has to scan. If it is bad application design generating tombstones, let AppDev know the design needs review. Otherwise AppDev will treat a successful compaction as a permanent fix.</p>
 
     <h2>Do not</h2>
     <ul>
