@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Cassandra Runbook</title>
-  <meta name="description" content="Operator notes for people who already run Apache Cassandra and DataStax Enterprise clusters.">
+  <meta name="description" content="Short operator notes for Apache Cassandra and DataStax Enterprise: what to check, and what not to do, when a cluster is already in trouble.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,34 +17,26 @@
     </nav>
   </header>
   <main>
-    <p class="meta">OPERATOR NOTES · NOT A VENDOR DOC</p>
-    <h1>Notes for people who already run the cluster.</h1>
-    <p class="lede">Short decision aids for Apache Cassandra and DataStax Enterprise operators. No beginner tour. No live cluster access. Patterns only.</p>
+    <p class="meta">FOR OPERATORS</p>
+    <h1>What to check when the cluster is already in trouble.</h1>
+    <p class="lede">Short notes from production incidents. Each one is a decision you can make on a live ring: what the error actually means, which node to test, and what not to run.</p>
 
     <article class="card">
-      <p class="meta">NOTE 01</p>
+      <p class="meta">NODE DOWN</p>
       <h2><a href="notes/repair-or-replace-address.html">Repair, or replace-address?</a></h2>
-      <p>A dead node is not automatically a replace. The choice depends on how long it has been down, whether its data is still streaming-worthy, and what the rest of the ring is doing.</p>
+      <p>A dead node is not automatically a replace. The choice depends on how long it has been down, whether its data is still worth keeping, and what the rest of the ring is doing.</p>
       <p><a href="notes/repair-or-replace-address.html">Read the decision tree</a></p>
     </article>
 
     <article class="card">
-      <p class="meta">NOTE 02</p>
+      <p class="meta">SAI INDEX</p>
       <h2><a href="notes/index-not-available.html">ReadFailure: INDEX_NOT_AVAILABLE</a></h2>
-      <p>A search read failed because one replica could not serve its index. Zero responses and one failure is a core problem, not a dead table.</p>
+      <p>An indexed query failed because a replica could not serve its storage-attached index. Test each node at LOCAL_ONE, then rebuild the index only where it failed.</p>
       <p><a href="notes/index-not-available.html">Read the check order</a></p>
     </article>
-      <h2>Monthly note</h2>
-      <p>One operator note a month. No course pitch in the first issue.</p>
-      <form action="#" method="post" onsubmit="event.preventDefault(); this.querySelector('.note').hidden = false;">
-        <input type="email" name="email" placeholder="you@work.com" aria-label="Email" required>
-        <button type="submit">Get the note</button>
-        <p class="note" hidden>Signup is not wired yet. This button only proves the page. Connect Buttondown or Kit before announcing the list.</p>
-      </form>
-    </section>
   </main>
   <footer>
-    <p>Independent operator notes. Not affiliated with the Apache Software Foundation or DataStax.</p>
+    <p>Independent notes for Cassandra operators. Not affiliated with the Apache Software Foundation or DataStax.</p>
   </footer>
 </body>
 </html>
