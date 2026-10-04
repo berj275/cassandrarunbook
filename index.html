@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cassandra Runbook</title>
+  <meta name="description" content="Operator notes for people who already run Apache Cassandra and DataStax Enterprise clusters.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="index.html">Cassandra <span>Runbook</span></a>
+    <nav>
+      <a href="index.html">Notes</a>
+      <a href="notes/repair-or-replace-address.html">Repair or replace-address</a>
+    </nav>
+  </header>
+  <main>
+    <p class="meta">OPERATOR NOTES · NOT A VENDOR DOC</p>
+    <h1>Notes for people who already run the cluster.</h1>
+    <p class="lede">Short decision aids for Apache Cassandra and DataStax Enterprise operators. No beginner tour. No live cluster access. Patterns only.</p>
+
+    <article class="card">
+      <p class="meta">NOTE 01</p>
+      <h2><a href="notes/repair-or-replace-address.html">Repair, or replace-address?</a></h2>
+      <p>A dead node is not automatically a replace. The choice depends on how long it has been down, whether its data is still streaming-worthy, and what the rest of the ring is doing.</p>
+      <p><a href="notes/repair-or-replace-address.html">Read the decision tree</a></p>
+    </article>
+
+    <section class="card">
+      <h2>Monthly note</h2>
+      <p>One operator note a month. No course pitch in the first issue.</p>
+      <form action="#" method="post" onsubmit="event.preventDefault(); this.querySelector('.note').hidden = false;">
+        <input type="email" name="email" placeholder="you@work.com" aria-label="Email" required>
+        <button type="submit">Get the note</button>
+        <p class="note" hidden>Signup is not wired yet. This button only proves the page. Connect Buttondown or Kit before announcing the list.</p>
+      </form>
+    </section>
+  </main>
+  <footer>
+    <p>Independent operator notes. Not affiliated with the Apache Software Foundation or DataStax.</p>
+  </footer>
+</body>
+</html>

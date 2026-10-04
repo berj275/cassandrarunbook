@@ -1,0 +1,78 @@
+:root {
+  --ink: #1c1917;
+  --muted: #57534e;
+  --line: #e7e5e4;
+  --paper: #fafaf9;
+  --card: #ffffff;
+  --accent: #9a3412;
+  --accent-soft: #ffedd5;
+  --max: 42rem;
+}
+* { box-sizing: border-box; }
+html { font-size: 18px; }
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  line-height: 1.6;
+}
+a { color: var(--accent); }
+header, main, footer { width: min(var(--max), calc(100% - 2rem)); margin: 0 auto; }
+header { padding: 1.75rem 0 1rem; border-bottom: 1px solid var(--line); }
+.brand { font-variant: small-caps; letter-spacing: 0.04em; text-decoration: none; color: var(--ink); font-size: 1rem; }
+.brand span { color: var(--accent); }
+nav { margin-top: 0.4rem; font-family: "Segoe UI", sans-serif; font-size: 0.8rem; }
+nav a { color: var(--muted); text-decoration: none; margin-right: 1rem; }
+nav a:hover { color: var(--ink); }
+main { padding: 2rem 0 3rem; }
+h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 0.6rem; }
+h2 { font-size: 1.25rem; margin: 1.8rem 0 0.4rem; }
+.lede { font-size: 1.1rem; color: var(--muted); }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  margin: 1.2rem 0;
+}
+.card h2 { margin-top: 0; }
+.meta { font-family: "Segoe UI", sans-serif; font-size: 0.75rem; color: var(--muted); letter-spacing: 0.02em; }
+ul { padding-left: 1.2rem; }
+code, .pill {
+  font-family: Consolas, "SFMono-Regular", ui-monospace, monospace;
+  font-size: 0.85em;
+}
+.pill {
+  display: inline-block;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  margin-right: 0.3rem;
+}
+footer { border-top: 1px solid var(--line); padding: 1.2rem 0 2rem; color: var(--muted); font-size: 0.85rem; }
+form { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
+input[type="email"] {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  min-width: 16rem;
+  background: white;
+}
+button, .button {
+  font-family: "Segoe UI", sans-serif;
+  background: var(--ink);
+  color: white;
+  border: 0;
+  border-radius: 6px;
+  padding: 0.5rem 0.8rem;
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+.note { font-size: 0.85rem; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 0.95rem; margin: 1rem 0; }
+th, td { text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); padding: 0.45rem 0.4rem; }
+th { font-family: "Segoe UI", sans-serif; font-size: 0.75rem; letter-spacing: 0.03em; color: var(--muted); }
