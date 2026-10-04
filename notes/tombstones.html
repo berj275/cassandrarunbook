@@ -30,7 +30,7 @@ SELECT ... FROM keyspace_name.table_name WHERE ...
 
     <h2>What it means</h2>
     <p>A tombstone is a marker that a cell, row, or range was deleted or that a TTL expired. Cassandra must read those markers to avoid returning data that should be gone. They are dropped later, at compaction, and only after <code>gc_grace_seconds</code> if repair is how you protect a delete. Until then every read of that slice pays for them.</p>
-    <p>The usual writers are TTLs on queue-shaped tables, inserts of nulls, collection overwrites, range deletes, and a query that reads a whole partition to find a few live rows.</p>
+    <p>The usual writers are a table used as a queue, inserts followed by deletes of the same rows, inserts of nulls, collection overwrites, range deletes, and a query that reads a whole partition to find a few live rows. TTLs on a table that is still read after expiry look the same on the read path.</p>
 
     <h2>Confirm the query, then the table</h2>
     <ol>
@@ -65,7 +65,8 @@ SELECT ... FROM keyspace_name.table_name WHERE pk = ...;</code></pre>
     <p><code>nodetool garbagecollect</code> on that table is the narrower reclaim when you need tombstones gone from SSTables that compaction is not visiting. It is still a local disk operation. Run it on the replica that failed the read, then confirm with the same <code>LOCAL_ONE</code> query.</p>
 
     <h2>Done when</h2>
-    <p>The application statement returns without a tombstone warning on the replicas that previously logged one. <code>tablestats</code> moving is not the same thing. The read is.</p>
+    <p>This incident is done when the application statement returns without a tombstone warning on the replicas that previously logged one. <code>tablestats</code> moving is not the same thing. The read is.</p>
+    <p>The problem is done only if the writes stop producing markers faster than compaction can drop them. A table with steady insert-and-delete churn will fail the same query again after the next wave. Operator steps buy time. They do not replace a design that deletes rows a read still has to scan. Say that in the ticket. Otherwise AppDev will treat a successful compaction as a permanent fix.</p>
 
     <h2>Do not</h2>
     <ul>
@@ -73,6 +74,7 @@ SELECT ... FROM keyspace_name.table_name WHERE pk = ...;</code></pre>
       <li>Run a full repair because a read saw tombstones. Repair can spread the markers to replicas that did not have them.</li>
       <li>Lower <code>gc_grace_seconds</code> on a table you repair, unless you accept that a missed repair can resurrect deleted data.</li>
       <li>Major-compact every table on the node. Compact the table the log named.</li>
+      <li>Tell AppDev the table is healthy because one compaction succeeded. If the application keeps deleting rows in the slice it reads, the warning comes back.</li>
       <li>Paste the raw query, key, or application name into a public note.</li>
     </ul>
 
