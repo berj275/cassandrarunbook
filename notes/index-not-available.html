@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>INDEX_NOT_AVAILABLE on a search read — Cassandra Runbook</title>
+  <meta name="description" content="How to troubleshoot a DSE Search ReadFailure of INDEX_NOT_AVAILABLE, error code 0x0002, when a coordinator gets a failure instead of rows.">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../index.html">Cassandra <span>Runbook</span></a>
+    <nav>
+      <a href="../index.html">Notes</a>
+      <a href="repair-or-replace-address.html">Repair or replace-address</a>
+      <a href="index-not-available.html">Index not available</a>
+    </nav>
+  </header>
+  <main>
+    <p class="meta">NOTE 02 · DSE SEARCH</p>
+    <h1>ReadFailure: INDEX_NOT_AVAILABLE</h1>
+    <p class="lede">A search read failed because a replica could not serve its index. This is not a timeout, and it is not proof the table is down. The coordinator asked one node for index results and that node refused.</p>
+
+    <h2>The error</h2>
+    <pre><code>ReadFailure: received 0 responses and 1 failures
+(INDEX_NOT_AVAILABLE=[/10.1.2.21])
+error_code_map: {'10.1.2.21': '0x0002'}</code></pre>
+    <p><code>0x0002</code> is the DSE Search request-failure code for <code>INDEX_NOT_AVAILABLE</code>. The address in the map is the replica that failed the search request. Anonymize it in tickets and notes. The value itself is not the interesting part.</p>
+    <p>Plain CQL against a table with no search index does not throw this. The query was a search read: a <code>solr_query</code>, a CQL query that DSE Search rewrote, or a driver call against a search-indexed table.</p>
+
+    <h2>What it means</h2>
+    <p>The coordinator got a failure instead of rows. Zero responses and one failure means it did not fall back to another replica for that attempt. The named node was expected to serve the search index and could not. Usual reasons:</p>
+    <ul>
+      <li>The search core is not loaded on that node. Startup, a failed core load, or the core was unloaded.</li>
+      <li>The index is still building after a create, a reload, or a node replace. Search indexing is asynchronous.</li>
+      <li>The node is up for Cassandra and down for Search. <code>UN</code> in <code>nodetool status</code> does not mean the core is queryable.</li>
+      <li>The index was never built on that node after a bootstrap or <code>replace_address</code>.</li>
+      <li>The query landed on a node that does not host the search index. Wrong datacenter, search disabled, or incomplete rebuild.</li>
+    </ul>
+
+    <h2>Check, in this order</h2>
+    <ol>
+      <li>Confirm the client statement is a search read. If it is ordinary CQL, this error is the wrong diagnosis.</li>
+      <li>Check the named node, not the whole ring. <code>nodetool status</code> first. A node in <code>DN</code> or <code>UJ</code> explains the failure. A node in <code>UN</code> does not clear it.</li>
+      <li>On that node, check the core. <code>dsetool list_indexes</code> and <code>dsetool status</code>. Then <code>dsetool get_core_status keyspace.table</code> for the table the client queried. You want to know whether the core is loaded and whether indexing is still running.</li>
+      <li>Read the node log around the failure for core-load errors, resource limits, or an index build still in progress. The client error will not say which.</li>
+      <li>Ask whether this node was recently replaced, rebuilt, or had search re-enabled. A new node does not inherit a queryable index from the dead host.</li>
+    </ol>
+
+    <h2>Fix</h2>
+    <table>
+      <thead>
+        <tr><th>What you found</th><th>What to do</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Core missing or failed to load</td><td>Fix the load error in the log, then reload the core. Reloading before the cause is fixed just fails again.</td></tr>
+        <tr><td>Index build still running</td><td>Wait. Do not rebuild a core that is already indexing. Tell the client to retry after the core reports queryable.</td></tr>
+        <tr><td>Node joined or was replaced, index never built</td><td>Rebuild the search index on that node only. Do not rebuild the ring.</td></tr>
+        <tr><td>Node is Cassandra-only, or in a datacenter without search</td><td>Fix placement or client routing. No core command will create an index the node is not supposed to serve.</td></tr>
+        <tr><td>Several search nodes fail the same way</td><td>Stop treating it as one bad host. Schema, resource limits, or a bad reindex are cluster-wide until proven otherwise.</td></tr>
+      </tbody>
+    </table>
+    <p>AppDev can retry the read once the core is loaded. A retry against the same unavailable index fails the same way. This failure does not mean the Cassandra replicas lost the row. It means the search path could not answer.</p>
+
+    <h2>Do not</h2>
+    <ul>
+      <li>Run a cluster repair because a search core was down. Repair does not load a Solr core.</li>
+      <li>Replace the node because Search refused a query. Cassandra can be healthy on that host.</li>
+      <li>Raise the consistency level to get past it. The index is unavailable. A stricter read still needs a core that can answer.</li>
+      <li>Paste the raw address, keyspace, or application name into a public note.</li>
+    </ul>
+
+    <p class="note">Commands differ by DSE version. Confirm <code>dsetool</code> subcommands and the search-index CQL syntax against the version you run. This is a decision aid, not a procedure for a specific cluster.</p>
+    <p><a href="../index.html">Back to notes</a></p>
+  </main>
+  <footer>
+    <p>Independent operator notes. Not affiliated with the Apache Software Foundation or DataStax.</p>
+  </footer>
+</body>
+</html>
