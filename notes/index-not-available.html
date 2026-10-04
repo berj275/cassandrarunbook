@@ -58,7 +58,6 @@ WHERE keyspace_name = 'keyspace_name' AND table_name = 'table_name';</code></pre
 
     <h2>Do not</h2>
     <ul>
-      <li>Treat this as a Solr or search-core outage. There is no core to reload.</li>
       <li>Run <code>nodetool repair</code> to fix an SAI index. Repair reconciles table data. <code>rebuild_index</code> rebuilds the index files on that node.</li>
       <li>Rebuild the healthy datacenter because one datacenter failed.</li>
       <li>Raise the consistency level to get past it. A stricter read still needs replicas whose index can answer.</li>
