@@ -14,6 +14,7 @@
       <a href="index.html">Notes</a>
       <a href="notes/repair-or-replace-address.html">Repair or replace-address</a>
       <a href="notes/index-not-available.html">Index not available</a>
+      <a href="notes/tombstones.html">Tombstones</a>
     </nav>
   </header>
   <main>
@@ -33,6 +34,12 @@
       <h2><a href="notes/index-not-available.html">ReadFailure: INDEX_NOT_AVAILABLE</a></h2>
       <p>An indexed query failed because a replica could not serve its storage-attached index. Test each node at LOCAL_ONE, then rebuild the index only where it failed.</p>
       <p><a href="notes/index-not-available.html">Read the check order</a></p>
+    </article>
+    <article class="card">
+      <p class="meta">READ PATH</p>
+      <h2><a href="notes/tombstones.html">Tombstones overwhelming a read</a></h2>
+      <p>The table is up. The query scanned deletion markers until Cassandra warned or failed. Bound the read, then compact only the table the log named.</p>
+      <p><a href="notes/tombstones.html">Read the check order</a></p>
     </article>
   </main>
   <footer>
