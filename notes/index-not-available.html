@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>INDEX_NOT_AVAILABLE on a search read — Cassandra Runbook</title>
-  <meta name="description" content="How to troubleshoot a DSE Search ReadFailure of INDEX_NOT_AVAILABLE, error code 0x0002, when a coordinator gets a failure instead of rows.">
+  <title>INDEX_NOT_AVAILABLE on an SAI read — Cassandra Runbook</title>
+  <meta name="description" content="How to find which replicas have a bad storage-attached index by querying each node at LOCAL_ONE, then rebuild the index only in the affected datacenter.">
   <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -17,60 +17,55 @@
     </nav>
   </header>
   <main>
-    <p class="meta">NOTE 02 · DSE SEARCH</p>
+    <p class="meta">NOTE 02 · STORAGE-ATTACHED INDEX</p>
     <h1>ReadFailure: INDEX_NOT_AVAILABLE</h1>
-    <p class="lede">A search read failed because a replica could not serve its index. This is not a timeout, and it is not proof the table is down. The coordinator asked one node for index results and that node refused.</p>
+    <p class="lede">A query that uses a storage-attached index failed because a replica could not serve that index. This is not a Solr error, and it is not proof the table is down. The coordinator asked one node for index results and that node refused.</p>
 
     <h2>The error</h2>
     <pre><code>ReadFailure: received 0 responses and 1 failures
 (INDEX_NOT_AVAILABLE=[/10.1.2.21])
 error_code_map: {'10.1.2.21': '0x0002'}</code></pre>
-    <p><code>0x0002</code> is the DSE Search request-failure code for <code>INDEX_NOT_AVAILABLE</code>. The address in the map is the replica that failed the search request. Anonymize it in tickets and notes. The value itself is not the interesting part.</p>
-    <p>Plain CQL against a table with no search index does not throw this. The query was a search read: a <code>solr_query</code>, a CQL query that DSE Search rewrote, or a driver call against a search-indexed table.</p>
+    <p><code>0x0002</code> is <code>INDEX_NOT_AVAILABLE</code>. The address is the replica that failed the indexed read. Anonymize it in tickets and notes. The query was using an SAI index. A plain primary-key read against the same table does not take this path.</p>
 
-    <h2>What it means</h2>
-    <p>The coordinator got a failure instead of rows. Zero responses and one failure means it did not fall back to another replica for that attempt. The named node was expected to serve the search index and could not. Usual reasons:</p>
-    <ul>
-      <li>The search core is not loaded on that node. Startup, a failed core load, or the core was unloaded.</li>
-      <li>The index is still building after a create, a reload, or a node replace. Search indexing is asynchronous.</li>
-      <li>The node is up for Cassandra and down for Search. <code>UN</code> in <code>nodetool status</code> does not mean the core is queryable.</li>
-      <li>The index was never built on that node after a bootstrap or <code>replace_address</code>.</li>
-      <li>The query landed on a node that does not host the search index. Wrong datacenter, search disabled, or incomplete rebuild.</li>
-    </ul>
+    <h2>What a local check is for</h2>
+    <p>The client error names one coordinator's failure. It does not tell you how many replicas have a bad index. Connect to each node and run the same query at <code>LOCAL_ONE</code>. That consistency level needs one replica in the local datacenter, and the node you connected to is the coordinator, so a failure stays on that node instead of being masked by a healthy replica.</p>
+    <p>One success does not clear the datacenter. In a six-node cluster, three nodes in each of two datacenters, the failure can sit in a single datacenter: two of the three nodes refuse the indexed read, and the third returns rows. The other datacenter can be clean. A client using <code>LOCAL_QUORUM</code> will keep hitting the bad pair whenever the coordinator is in the bad datacenter.</p>
 
-    <h2>Check, in this order</h2>
+    <h2>Reproduce it</h2>
     <ol>
-      <li>Confirm the client statement is a search read. If it is ordinary CQL, this error is the wrong diagnosis.</li>
-      <li>Check the named node, not the whole ring. <code>nodetool status</code> first. A node in <code>DN</code> or <code>UJ</code> explains the failure. A node in <code>UN</code> does not clear it.</li>
-      <li>On that node, check the core. <code>dsetool list_indexes</code> and <code>dsetool status</code>. Then <code>dsetool get_core_status keyspace.table</code> for the table the client queried. You want to know whether the core is loaded and whether indexing is still running.</li>
-      <li>Read the node log around the failure for core-load errors, resource limits, or an index build still in progress. The client error will not say which.</li>
-      <li>Ask whether this node was recently replaced, rebuilt, or had search re-enabled. A new node does not inherit a queryable index from the dead host.</li>
+      <li>Take the application statement that failed. Keep the SAI predicate. Do not rewrite it as a primary-key read.</li>
+      <li>From a shell on each node, open <code>cqlsh</code> against that node. Running it through another host defeats the check.</li>
+      <li>Set the consistency, then run the query:</li>
+    </ol>
+    <pre><code>CONSISTENCY LOCAL_ONE;
+SELECT ... FROM keyspace_name.table_name WHERE indexed_column = ...;</code></pre>
+    <ol start="4">
+      <li>Record pass or <code>INDEX_NOT_AVAILABLE</code> for every node. Do this in both datacenters before you rebuild anything.</li>
+      <li>A node that returns rows has a usable SAI index for that query. A node that returns <code>0x0002</code> does not. Expect the bad nodes to cluster in one datacenter.</li>
     </ol>
 
-    <h2>Fix</h2>
-    <table>
-      <thead>
-        <tr><th>What you found</th><th>What to do</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>Core missing or failed to load</td><td>Fix the load error in the log, then reload the core. Reloading before the cause is fixed just fails again.</td></tr>
-        <tr><td>Index build still running</td><td>Wait. Do not rebuild a core that is already indexing. Tell the client to retry after the core reports queryable.</td></tr>
-        <tr><td>Node joined or was replaced, index never built</td><td>Rebuild the search index on that node only. Do not rebuild the ring.</td></tr>
-        <tr><td>Node is Cassandra-only, or in a datacenter without search</td><td>Fix placement or client routing. No core command will create an index the node is not supposed to serve.</td></tr>
-        <tr><td>Several search nodes fail the same way</td><td>Stop treating it as one bad host. Schema, resource limits, or a bad reindex are cluster-wide until proven otherwise.</td></tr>
-      </tbody>
-    </table>
-    <p>AppDev can retry the read once the core is loaded. A retry against the same unavailable index fails the same way. This failure does not mean the Cassandra replicas lost the row. It means the search path could not answer.</p>
+    <h2>Rebuild only where it failed</h2>
+    <p>SAI is built from the SSTables on that node. A cluster repair does not rebuild it. Replacing the node does not fix an index that is simply unreadable. On each node that failed the <code>LOCAL_ONE</code> check, rebuild that index:</p>
+    <pre><code>nodetool rebuild_index keyspace_name table_name sai_index_name</code></pre>
+    <p>The index name is the one from <code>system_schema.indexes</code>, not the column name, unless you created it with that name. Confirm the row before you run the command:</p>
+    <pre><code>SELECT index_name, kind FROM system_schema.indexes
+WHERE keyspace_name = 'keyspace_name' AND table_name = 'table_name';</code></pre>
+    <p>Run it on the bad nodes in the affected datacenter. In the six-node case that was two nodes of three. Running it on the third node in that datacenter is reasonable if you want the datacenter uniform. Do not run it in the datacenter that already passed <code>LOCAL_ONE</code>.</p>
+    <p>One node at a time if the table is large. The rebuild reads local SSTables and writes a new index. Watch compaction and disk. When a node finishes, repeat the <code>LOCAL_ONE</code> query on that node before you start the next.</p>
+
+    <h2>Done when</h2>
+    <p>Every node that previously failed now returns rows at <code>LOCAL_ONE</code>. Then run the original client statement at the consistency the application uses. A retry before the rebuild finishes fails the same way. The base table was still readable by primary key the whole time.</p>
 
     <h2>Do not</h2>
     <ul>
-      <li>Run a cluster repair because a search core was down. Repair does not load a Solr core.</li>
-      <li>Replace the node because Search refused a query. Cassandra can be healthy on that host.</li>
-      <li>Raise the consistency level to get past it. The index is unavailable. A stricter read still needs a core that can answer.</li>
+      <li>Treat this as a Solr or search-core outage. There is no core to reload.</li>
+      <li>Run <code>nodetool repair</code> to fix an SAI index. Repair reconciles table data. <code>rebuild_index</code> rebuilds the index files on that node.</li>
+      <li>Rebuild the healthy datacenter because one datacenter failed.</li>
+      <li>Raise the consistency level to get past it. A stricter read still needs replicas whose index can answer.</li>
       <li>Paste the raw address, keyspace, or application name into a public note.</li>
     </ul>
 
-    <p class="note">Commands differ by DSE version. Confirm <code>dsetool</code> subcommands and the search-index CQL syntax against the version you run. This is a decision aid, not a procedure for a specific cluster.</p>
+    <p class="note">Command names differ slightly by version. Confirm <code>nodetool rebuild_index</code> against the version you run. This is a decision aid, not a procedure for a specific cluster.</p>
     <p><a href="../index.html">Back to notes</a></p>
   </main>
   <footer>
