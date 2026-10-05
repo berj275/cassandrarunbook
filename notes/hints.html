@@ -33,9 +33,9 @@
 
     <h2>Fix the target first</h2>
     <p>Bring the down replica back if the host and disks are fine. That is the start-and-repair path, not a replace. Hints replay on their own once it is reachable. If the host is gone, replace or remove it before you spend time on the hint files. Replaying at a node that will never return does nothing.</p>
-    <p>If the recovered node is falling over under replay, pause handoff from the coordinators that are crushing it:</p>
+    <p>If the recovered node is falling over under replay, pause handoff on the coordinators that are sending it, not on the recovered node. The hint files are on the nodes that accepted the writes. Replay is those nodes pushing mutations at the replica that missed them. <code>pausehandoff</code> only stops the node you run it on. Pausing the recovered node stops hints it might send somewhere else. It does not stop the inbound replay.</p>
     <pre><code>nodetool pausehandoff</code></pre>
-    <p>Let the node become stable. Compaction and reads should settle. Then resume:</p>
+    <p>Run that on each coordinator whose hints directory is large or whose <code>HintedHandoff</code> pending is climbing. Let the recovered node become stable. Compaction and reads should settle. Then resume on those same coordinators:</p>
     <pre><code>nodetool resumehandoff</code></pre>
     <p>If resume floods it again, lower the throttle on the coordinators with <code>nodetool sethintedhandoffthrottlekb</code>, then resume. Pausing is a delay. It is not a delete. <code>disablehandoff</code> stops new hints from being stored. Use that only while you are in the incident, and turn it back on with <code>enablehandoff</code>. A cluster with handoff left disabled drops the safety net for the next outage.</p>
 
@@ -59,7 +59,7 @@
       <li>Truncate hints for a node that has been down for twenty minutes and is your only missing replica. Those files may be the writes the other copies do not have.</li>
       <li>Raise <code>max_hint_window_in_ms</code> during the incident to "stop the pile." A longer window stores more hints. It does not drain them.</li>
       <li>Leave handoff disabled after the incident.</li>
-      <li>Treat a full hints disk as a reason to replace the coordinator. The coordinator stored the hints. The replica failed the write.</li>
+      <li>Pause handoff on the node that just came back. That node is the target. Pausing it does not stop the other nodes from replaying hints at it.</li>
     </ul>
 
     <p class="note">Hint file layout and the exact <code>tpstats</code> names differ by version. The commands above are the long-standing nodetool set. Confirm them against the version you run. This is a decision aid, not a procedure for a specific cluster.</p>
