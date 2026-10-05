@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hints piling up — Cassandra Runbook</title>
+  <meta name="description" content="What to do when Cassandra hinted handoff fills disk or a restarted node is buried in hint replay. Find the down replica first. Truncate only after you know the writes exist elsewhere.">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../index.html">Cassandra <span>Runbook</span></a>
+    <nav>
+      <a href="../index.html">All notes</a>
+    </nav>
+  </header>
+  <main>
+    <p class="meta">NOTE 04 · HINTS</p>
+    <h1>Hints piling up</h1>
+    <p class="lede">Hints are the coordinator's copy of a write that a replica did not acknowledge. A pile of them means some node was down or too slow. The hints are the symptom. The down node is the problem. Deleting the symptom first can drop the only copy of those mutations.</p>
+
+    <h2>What you are looking at</h2>
+    <p>On a write, the coordinator stores a hint when a replica misses the ack and the miss is inside <code>max_hint_window_in_ms</code>. The default window is three hours. Hints live on the coordinator, under the hints directory in the data path, not on the node that was down. When that node comes back, coordinators replay the hints at it.</p>
+    <p>Two failures follow. Coordinators fill a disk with hint files. Or the node comes back and hint replay, plus the normal write load, stalls it again.</p>
+
+    <h2>Confirm it</h2>
+    <ol>
+      <li>On a coordinator that is growing disk, check the hints directory. The data path is often <code>/var/lib/cassandra/hints</code>. A directory that keeps growing is the pile. Snapshots and commitlog are different directories. Do not clear those because hints are large.</li>
+      <li><code>nodetool tpstats</code> and look at <code>HintedHandoff</code>. Pending work means replay is behind. Blocked or dropped means the coordinator is refusing new hints or falling behind.</li>
+      <li><code>nodetool status</code>. The usual cause is a <code>DN</code> node, or a node that just returned to <code>UN</code> and is now the target of every coordinator's replay.</li>
+      <li>Note how long that node was down against the hint window. Past the window, coordinators stop storing new hints and expired hints will not replay. Inside the window, the files may be the only extra copy of writes the down replica missed.</li>
+    </ol>
+
+    <h2>Fix the target first</h2>
+    <p>Bring the down replica back if the host and disks are fine. That is the start-and-repair path, not a replace. Hints replay on their own once it is reachable. If the host is gone, replace or remove it before you spend time on the hint files. Replaying at a node that will never return does nothing.</p>
+    <p>If the recovered node is falling over under replay, pause handoff from the coordinators that are crushing it:</p>
+    <pre><code>nodetool pausehandoff</code></pre>
+    <p>Let the node become stable. Compaction and reads should settle. Then resume:</p>
+    <pre><code>nodetool resumehandoff</code></pre>
+    <p>If resume floods it again, lower the throttle on the coordinators with <code>nodetool sethintedhandoffthrottlekb</code>, then resume. Pausing is a delay. It is not a delete. <code>disablehandoff</code> stops new hints from being stored. Use that only while you are in the incident, and turn it back on with <code>enablehandoff</code>. A cluster with handoff left disabled drops the safety net for the next outage.</p>
+
+    <h2>Truncate only after the writes are safe</h2>
+    <p>Truncating throws away stored hints on that coordinator. It does not repair anything.</p>
+    <pre><code>nodetool truncatehints 10.1.2.21</code></pre>
+    <p>That form drops hints for one endpoint. Omit the address and you drop every hint on this coordinator. Do it only in one of these cases:</p>
+    <ul>
+      <li>The target has been down longer than the hint window, the hints are already expired, and disk is the emergency. You are deleting files that were not going to replay.</li>
+      <li>The target is back, a repair of its ranges has finished, and you have decided the repair is the copy you trust. Truncate is cleanup, not the repair.</li>
+      <li>You accept losing writes that no other replica acknowledged. At RF 3 and <code>LOCAL_QUORUM</code>, a hint is often the third copy, not the only copy. At RF 1, or if the other replicas also missed the write, it may be the only copy.</li>
+    </ul>
+    <p>Run it on each coordinator that holds a pile, not once for the cluster. Hints are local files.</p>
+
+    <h2>Done when</h2>
+    <p>The node that was down stays <code>UN</code>. Hint directories stop growing. <code>HintedHandoff</code> pending falls and does not climb again. A truncated directory with the target still <code>DN</code> is not done. You removed the warning and left the outage.</p>
+
+    <h2>Do not</h2>
+    <ul>
+      <li>Delete the hints directory out from under a running node. Use <code>truncatehints</code>. A removed directory can come back as a replay error or a restart problem.</li>
+      <li>Truncate hints for a node that has been down for twenty minutes and is your only missing replica. Those files may be the writes the other copies do not have.</li>
+      <li>Raise <code>max_hint_window_in_ms</code> during the incident to "stop the pile." A longer window stores more hints. It does not drain them.</li>
+      <li>Leave handoff disabled after the incident.</li>
+      <li>Treat a full hints disk as a reason to replace the coordinator. The coordinator stored the hints. The replica failed the write.</li>
+    </ul>
+
+    <p class="note">Hint file layout and the exact <code>tpstats</code> names differ by version. The commands above are the long-standing nodetool set. Confirm them against the version you run. This is a decision aid, not a procedure for a specific cluster.</p>
+    <p><a href="../index.html">Back to notes</a></p>
+  </main>
+  <footer>
+    <p>Independent operator notes. Not affiliated with the Apache Software Foundation or DataStax.</p>
+  </footer>
+</body>
+</html>
