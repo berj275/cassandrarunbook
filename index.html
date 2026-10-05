@@ -22,7 +22,7 @@
     <article class="card">
       <p class="meta">NODE DOWN</p>
       <h2><a href="notes/repair-or-replace-address.html">Repair, or replace-address?</a></h2>
-      <p>A dead node is not automatically a replace. The choice depends on how long it has been down, whether its data is still worth keeping, and what the rest of the ring is doing.</p>
+      <p>Three different operations. Start the same node if the disks survived. Replace only if the host is gone and you still want those tokens. Remove only if nothing is coming back.</p>
       <p><a href="notes/repair-or-replace-address.html">Read the decision tree</a></p>
     </article>
 
@@ -37,6 +37,13 @@
       <h2><a href="notes/tombstones.html">Tombstones overwhelming a read</a></h2>
       <p>The table is up. The query scanned deletion markers until Cassandra warned or failed. Bound the read, then compact only the table the log named.</p>
       <p><a href="notes/tombstones.html">Read the check order</a></p>
+    </article>
+
+    <article class="card">
+      <p class="meta">HINTS</p>
+      <h2><a href="notes/hints.html">Hints piling up</a></h2>
+      <p>A coordinator is storing writes a replica did not acknowledge. Fix the down node first. Pause replay if the recovered node is falling over. Truncate only after those writes are safe.</p>
+      <p><a href="notes/hints.html">Read the check order</a></p>
     </article>
   </main>
   <footer>
