@@ -26,7 +26,12 @@
     <h2>Confirm it</h2>
     <ol>
       <li>On a coordinator that is growing disk, check the hints directory. The data path is often <code>/var/lib/cassandra/hints</code>. A directory that keeps growing is the pile. Snapshots and commitlog are different directories. Do not clear those because hints are large.</li>
-      <li><code>nodetool tpstats</code> and look at <code>HintedHandoff</code>. Pending work means replay is behind. Blocked or dropped means the coordinator is refusing new hints or falling behind.</li>
+      <li><code>nodetool tpstats</code> and look at the <code>HintedHandoff</code> row. It is in the pool table, not a separate command:</li>
+    </ol>
+    <pre><code>Pool Name                    Active   Pending   Completed   Blocked  All time blocked
+HintedHandoff                     1      1842     3904411         0                 0</code></pre>
+    <p>Pending is the count to watch. Falling means replay is catching up. Climbing, or Blocked and Dropped rising, means the coordinator is behind or refusing work. On some versions the row is named <code>HintDispatcher</code> or sits under a Hints section. The pending number is the same idea.</p>
+    <ol start="3">
       <li><code>nodetool status</code>. The usual cause is a <code>DN</code> node, or a node that just returned to <code>UN</code> and is now the target of every coordinator's replay.</li>
       <li>Note how long that node was down against the hint window. Past the window, coordinators stop storing new hints and expired hints will not replay. Inside the window, the files may be the only extra copy of writes the down replica missed.</li>
     </ol>
