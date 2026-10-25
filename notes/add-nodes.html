@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Adding nodes to a live cluster — Cassandra Runbook</title>
+  <meta name="description" content="What to check before starting a new Cassandra node, how to add nodes across racks or availability zones, and when to run cleanup.">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../index.html">Cassandra <span>Runbook</span></a>
+    <nav>
+      <a href="../index.html">All notes</a>
+    </nav>
+  </header>
+  <main>
+    <p class="meta">NOTE 05 · CAPACITY</p>
+    <h1>Adding nodes to a live cluster</h1>
+    <p class="lede">A new node is a stream of data from the nodes that already own it. On a cluster that is already hot, that stream is extra load. The decision is not "can Cassandra add a node." It is whether the ring can absorb one bootstrap without the application falling behind, and in what order.</p>
+
+    <h2>Before you start the first node</h2>
+    <p>These checks are on the new host, before Cassandra is started. A node that already has data directories, or the wrong version, will not bootstrap cleanly.</p>
+    <ol>
+      <li>Confirm you are on the host you intend to add. Hostname, IP, and rack or availability zone. Adding the wrong machine is a longer outage than a slow stream.</li>
+      <li>Cassandra version matches the rest of the cluster. Java version matches. A newer minor version on the new node is a mixed-version ring. Do not start it.</li>
+      <li>Data directory is empty. Hints, commitlog, and saved_caches directories do not already exist, or are empty. This is a new node. Leftover files from a previous install make it look like a restart of an old node.</li>
+      <li>Every filesystem Cassandra needs is mounted, with space. A node that starts and immediately fills a volume is worse than a node that has not started.</li>
+      <li>Seeds list does not include this node yet. It can be added to seeds after it is <code>UN</code>, if you use seeds that way. Do not list a node as a seed before it has joined.</li>
+      <li><code>auto_bootstrap</code> is true. For vnodes, do not set <code>initial_token</code>. Cassandra will allocate tokens. Setting tokens by hand on a vnode cluster fights the allocation.</li>
+    </ol>
+
+    <h2>One node, then the next rack</h2>
+    <p>Add one node at a time. Wait until it is <code>UN</code> and streaming has finished before you start the next. On a cluster with racks or availability zones, rotate: one node in zone 1, then zone 2, then zone 3, then repeat. Do not fill one zone first. A zone that suddenly holds more tokens than the others changes which nodes serve reads while the rest of the addition is still running.</p>
+    <p>Two data centers do not change the rule. Finish the rotation in one data center, or keep the same zone order in both, but do not start a dozen nodes at once. Each new node pulls data from the existing owners. On a cluster that is already near capacity, several concurrent bootstraps are how the application falls behind.</p>
+
+    <h2>While it streams</h2>
+    <p>On the new node, tail <code>system.log</code>. Bootstrap progress, stream errors, and the transition out of joining show up there. From an existing node, the practical check is:</p>
+    <pre><code>nodetool status --resolve-ip | grep UJ</code></pre>
+    <p><code>UJ</code> is Up and Joining. Watch the Load column on that row. It should climb as data arrives. A Load that stays flat for a long time, with no movement in the log, is a stuck stream. A Load that climbs slowly while the source nodes stay healthy is a slow stream. Those are different. <code>nodetool netstats</code> on the new node shows the same streams in more detail if the Load number is ambiguous.</p>
+    <p>When the <code>UJ</code> grep returns nothing, the node has left the joining state. Stop the log tail. Confirm it from an existing node:</p>
+    <pre><code>nodetool status --resolve-ip | grep `hostname`</code></pre>
+    <p>You want <code>UN</code>. That is the signal the node has joined. It is not yet the signal that cleanup has run, or that a repair has checked the ranges.</p>
+    <p>If the application falls behind during a single bootstrap, the cluster was already short on capacity. That is the reason you are adding nodes. It is also the reason to add them one at a time, and to watch the next one more closely. Cassandra can run maintenance during business hours when the ring has spare capacity. When it does not, a bootstrap is visible to the application. Adding the nodes is the fix. Starting several at once is not.</p>
+
+    <h2>After the new nodes are UN</h2>
+    <p>Existing nodes still hold copies of data for tokens they no longer own. <code>nodetool cleanup</code> on those nodes drops the extra data. It is disk and CPU work. Run it after the new nodes are stable, not during the next bootstrap, and not on every node at once. One node, or one rack, then the next. Cleanup is how you get the disk space back. It is not required for correctness on the next read. Reads will use the new owners. Cleanup reclaims the old copies.</p>
+    <p>Repair on your normal schedule after the addition settles. Do not start a full repair while nodes are still bootstrapping.</p>
+
+    <h2>Done when</h2>
+    <p>Every new node is <code>UN</code>. Streaming has finished. The application latency during the next business day is no worse than before the addition, or better. Cleanup can still be in progress. The addition is not done when the first node reaches <code>UN</code>. It is done when the capacity you added is actually serving traffic and the extra copies are being removed on a schedule you control.</p>
+
+    <h2>Do not</h2>
+    <ul>
+      <li>Start the new node with data already in the data directory. Empty it first. A partial directory is not a bootstrap.</li>
+      <li>Add several nodes in the same rack or availability zone before you have added any in the others.</li>
+      <li>Start the next node while the previous one is still streaming, on a cluster that is already hot.</li>
+      <li>Set <code>initial_token</code> on a vnode node unless you have a specific reason and have calculated the tokens. The default allocation exists so you do not have to.</li>
+      <li>Run cleanup on every existing node at the same time. It competes with the same disk the application is using.</li>
+      <li>Treat a successful bootstrap as proof the range is consistent. Streaming finished means the new node has a copy. Repair is what checks it, on your normal schedule.</li>
+    </ul>
+
+    <p class="note">Token allocation and the exact streaming output differ by version. Vnodes are the common case. Single-token clusters need an explicit token plan before the first start. Confirm against the version you run. This is a decision aid, not a procedure for a specific cluster.</p>
+    <p><a href="../index.html">Back to notes</a></p>
+  </main>
+  <footer>
+    <p>Independent operator notes. Not affiliated with the Apache Software Foundation or DataStax.</p>
+  </footer>
+</body>
+</html>
