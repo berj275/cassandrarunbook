@@ -70,7 +70,7 @@ HintedHandoff                     1      1842     3904411         0             
       <li>Raise <code>max_hint_window_in_ms</code> during the incident to "stop the pile." A longer window stores more hints. It does not drain them.</li>
       <li>Leave handoff disabled after the incident.</li>
       <li>Pause, throttle, or truncate a drain that is already falling on a node that is staying <code>UN</code>. Slow catch-up is the normal path.</li>
-      <li>Bounce the coordinator nodes because the OpsCenter hint graph is not falling fast enough. A restart interrupts the replay that is already running. A cleaner graph after the bounce is the metric resetting, not hints delivered. There is no operational gain.</li>
+      <li>Bounce the coordinator nodes unnecessarily while hints are being handed off. A coordinator node restart interrupts hint handoff that is already running. There is no operational gain.</li>
       <li>Pause handoff on the node that just came back. That node is the target. Pausing it does not stop the other nodes from replaying hints at it.</li>
     </ul>
 
