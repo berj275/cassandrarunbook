@@ -40,7 +40,7 @@ HintedHandoff                     1      1842     3904411         0             
     <p>Bring the down replica back if the host and disks are fine. That is the start-and-repair path, not a replace. Hints replay on their own once it is reachable. If the host is gone, replace or remove it before you spend time on the hint files. Replaying at a node that will never return does nothing.</p>
     <h2>If the node is back and hints are falling, leave it</h2>
     <p>The common case needs no command. The node that was down is <code>UN</code> again, it is staying up, and the hint counts on the coordinators are going down. Slow is still working. Hint replay is throttled on purpose so it does not bury the node that just returned. A drain that takes hours after a multi-hour outage is normal, especially when many coordinators are replaying at once.</p>
-    <p>Watch <code>HintedHandoff</code> pending and the size of the hints directory. If both are falling and the recovered node stays <code>UN</code> with ordinary read and write latency, stop. Do not pause handoff, do not lower the throttle, and do not truncate. Those are for the cases below, where replay is hurting the node or the files will never be delivered. Intervening on a healthy drain only delays the catch-up.</p>
+    <p>Watch <code>HintedHandoff</code> pending and the size of the hints directory. If both are falling and the recovered node stays <code>UN</code> with ordinary read and write latency, stop. Do not pause handoff, do not lower the throttle, do not truncate, and do not bounce the coordinators to make a graph look better. Those are for the cases below, where replay is hurting the node or the files will never be delivered. Intervening on a healthy drain only delays the catch-up.</p>
 
     <h2>When replay is the problem</h2>
     <p>Use these only if the recovered node is not staying healthy. It is flapping, latency is climbing, or pending hints are not falling. Pause handoff on the coordinators that are sending, not on the recovered node. The hint files are on the nodes that accepted the writes. Replay is those nodes pushing mutations at the replica that missed them. <code>pausehandoff</code> only stops the node you run it on.</p>
@@ -70,6 +70,7 @@ HintedHandoff                     1      1842     3904411         0             
       <li>Raise <code>max_hint_window_in_ms</code> during the incident to "stop the pile." A longer window stores more hints. It does not drain them.</li>
       <li>Leave handoff disabled after the incident.</li>
       <li>Pause, throttle, or truncate a drain that is already falling on a node that is staying <code>UN</code>. Slow catch-up is the normal path.</li>
+      <li>Bounce the coordinator nodes because the OpsCenter hint graph is not falling fast enough. A restart interrupts the replay that is already running. A cleaner graph after the bounce is the metric resetting, not hints delivered. There is no operational gain.</li>
       <li>Pause handoff on the node that just came back. That node is the target. Pausing it does not stop the other nodes from replaying hints at it.</li>
     </ul>
 
