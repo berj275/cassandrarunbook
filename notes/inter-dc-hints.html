@@ -27,7 +27,7 @@
     <ol>
       <li><code>nodetool status</code> on several nodes. All <code>UN</code> is expected. A <code>DN</code> node is a different problem.</li>
       <li><code>nodetool describecluster</code> from more than one node, more than once. Intermittent "unreachable" that clears on its own, and that not every node agrees on, is gossip lag under load. It is not a stable partition.</li>
-      <li>From a coordinator that is still accumulating hints, measure latency to nodes in the other data center. Ping is enough to see a split. In one case the nodes still accumulating hints were the ones at 66 ms and 76 ms while the data-center average was about 54 ms. The nodes that drained were the lower-latency ones.</li>
+      <li>From a coordinator that is still accumulating hints, measure latency to nodes in the other data center. Ping is enough to see a split. A slower response time on the cross-DC ping, compared with the other nodes in the same data center, is a symptom. The nodes that keep accumulating hints are often the ones with the higher latency. The nodes that drain are the lower-latency ones.</li>
       <li>Check <code>max_hint_window_in_ms</code>. A long window (hours or days) means the files will keep growing until the timeouts stop. It does not cause the timeouts.</li>
       <li>TCP connectivity on 7000/7001 working rules out a simple firewall block. It does not rule out loss, retransmits, or a path that is slower for some hosts.</li>
     </ol>
@@ -49,7 +49,7 @@
       <li>Assume the newer data centers are the cause because they were added recently. In this pattern they were not accumulating hints. The path between the older data centers was.</li>
     </ul>
 
-    <p class="note">Cross-DC latency and hint accumulation interact. The commands above are the long-standing nodetool set. Latency numbers will differ by network. Confirm the split on your hosts before you call it a network problem. This is a decision aid, not a procedure for a specific cluster.</p>
+    <p class="note">Cross-DC latency and hint accumulation interact. The commands above are the long-standing nodetool set. What counts as slow will differ by network. Confirm the split on your hosts before you call it a network problem. This is a decision aid, not a procedure for a specific cluster.</p>
     <p><a href="../index.html">Back to notes</a></p>
   </main>
   <footer>
