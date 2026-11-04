@@ -21,13 +21,13 @@
 
     <h2>What you are looking at</h2>
     <p>On startup, Cassandra reads the transaction logs under the table directory. A compaction log records which SSTables were inputs and which were outputs. If the log has a COMMIT but one of the old SSTables has a different modification time than the log expects, Cassandra treats the disk as inconsistent and aborts. The log includes the transaction contents. The line that matters is the one marked unexpected:</p>
-    <pre><code>Unexpected disk state: failed to read transaction log [bb_txn_compaction_<uuid>.log in /var/lib/cassandra/data/<keyspace>/<table>-<id>]
+    <pre><code>Unexpected disk state: failed to read transaction log [bb_txn_compaction_&lt;uuid&gt;.log in /var/lib/cassandra/data/&lt;keyspace&gt;/&lt;table&gt;-&lt;id&gt;]
 Files and contents follow:
 ...
-REMOVE:[.../bb-<generation>-bti-,<mtime>,20][<size>]
-***Unexpected files detected for sstable [bb-<generation>-bti-]: last update time [21:59:22] should have been [22:03:20]
+REMOVE:[.../bb-&lt;generation&gt;-bti-,&lt;mtime&gt;,20][&lt;size&gt;]
+***Unexpected files detected for sstable [bb-&lt;generation&gt;-bti-]: last update time [21:59:22] should have been [22:03:20]
 ...
-COMMIT:[,0,0][<timestamp>]</code></pre>
+COMMIT:[,0,0][&lt;timestamp&gt;]</code></pre>
     <p>The node is down. The other replicas are still serving. This is not a cluster-wide schema or streaming problem. The ADD lines are the new SSTables the compaction produced. The REMOVE lines are the old ones it intended to delete. One of those old files has an mtime that does not match the log, so Cassandra will not finish the cleanup.</p>
 
     <h2>Confirm it</h2>
@@ -46,7 +46,7 @@ COMMIT:[,0,0][<timestamp>]</code></pre>
     </ul>
     <p>Leave every other SSTable and every other transaction log. Start Cassandra normally. If startup succeeds, the transaction log is no longer blocking. The node will rejoin and stream or repair as needed to cover the data that was in the removed SSTable.</p>
     <p>After the node is <code>UN</code>, run a repair of the affected table, or let your normal repair schedule cover it. A primary-range repair of that table is enough if you want to force it:</p>
-    <pre><code>nodetool repair -pr <keyspace> <table></code></pre>
+    <pre><code>nodetool repair -pr &lt;keyspace&gt; &lt;table&gt;</code></pre>
     <p>The removed SSTable was an input to a compaction that did not finish cleanly. The other replicas still have the data. Repair fills this node. You do not need to restore the files you set aside unless startup fails for a different reason.</p>
 
     <h2>Done when</h2>
