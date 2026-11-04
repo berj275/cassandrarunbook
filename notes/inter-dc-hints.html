@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hints accumulating between data centers — Cassandra Runbook</title>
+  <meta name="description" content="What to check when hints pile up between data centers, describecluster flaps, and some nodes have higher cross-DC latency than others.">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../index.html">Cassandra <span>Runbook</span></a>
+    <nav>
+      <a href="../index.html">All notes</a>
+    </nav>
+  </header>
+  <main>
+    <p class="meta">NOTE 07 · HINTS / NETWORK</p>
+    <h1>Hints accumulating between data centers</h1>
+    <p class="lede">Hints piling up on some nodes, while others in the same data center drain, usually means those coordinators are timing out writes to another data center. The cluster can be fully up. The difference is latency, not a partition.</p>
+
+    <h2>What you are looking at</h2>
+    <p>Hint files are growing on disk in one or two data centers. Dropped messages are elevated, often on the far side. <code>nodetool status</code> shows every node <code>UN</code>. <code>nodetool describecluster</code> sometimes reports a node unreachable, and the view is not the same from every node. A minute later the same command is clean. Direct TCP to ports 7000 and 7001 succeeds. Newer data centers are not accumulating hints. The older ones are.</p>
+    <p>This is not the single-node hint pile from a node that was down. The target nodes are up. The coordinators that keep storing hints are the ones with higher latency to the other data center.</p>
+
+    <h2>Confirm it</h2>
+    <ol>
+      <li><code>nodetool status</code> on several nodes. All <code>UN</code> is expected. A <code>DN</code> node is a different problem.</li>
+      <li><code>nodetool describecluster</code> from more than one node, more than once. Intermittent "unreachable" that clears on its own, and that not every node agrees on, is gossip lag under load. It is not a stable partition.</li>
+      <li>From a coordinator that is still accumulating hints, measure latency to nodes in the other data center. Ping is enough to see a split. In one case the nodes still accumulating hints were the ones at 66 ms and 76 ms while the data-center average was about 54 ms. The nodes that drained were the lower-latency ones.</li>
+      <li>Check <code>max_hint_window_in_ms</code>. A long window (hours or days) means the files will keep growing until the timeouts stop. It does not cause the timeouts.</li>
+      <li>TCP connectivity on 7000/7001 working rules out a simple firewall block. It does not rule out loss, retransmits, or a path that is slower for some hosts.</li>
+    </ol>
+
+    <h2>Immediate relief, then the network</h2>
+    <p>A restart of the coordinators that are accumulating hints clears stuck messaging state. After the restart, describecluster usually stays clean, dropped messages fall, and most hint backlogs begin to drain. A gossip bounce alone often does not. The restart is relief. It is not the fix if the latency split is still there.</p>
+    <p>After the restart, watch which nodes drain and which do not. If two nodes in the same data center keep accumulating hints while the others drain, and those two have higher latency to the far data center, the pattern is a feedback loop. Application writes plus hint replay increase load on the far side, latency rises, the slower coordinators time out more writes, and they store more hints. The cluster is not partitioned. It is working through a backlog under uneven cross-DC latency.</p>
+    <p>Hand the latency split to the networking team. Ping from each node in the affected data center to the other, and note which hosts are slower. Interface counters, TCP retransmits, and a path trace are the next measurements. iperf3 is useful if it is allowed. Do not change <code>phi_convict_threshold</code>, write timeouts, or the hint throttle to hide the symptom unless you have a measured reason and a change window. Those settings mask the latency. They do not remove it.</p>
+
+    <h2>Done when</h2>
+    <p>Hint directories on the affected coordinators are shrinking, not growing. Dropped messages on the far data center have returned to the normal rate. <code>describecluster</code> is stable from the nodes that were flapping. The latency split has been identified and is with the networking team, or has been corrected. A restart that made the graphs look better for an hour, while the slow nodes are still slow, is not done.</p>
+
+    <h2>Do not</h2>
+    <ul>
+      <li>Treat intermittent describecluster "unreachable" as a partition when status is <code>UN</code> everywhere and TCP succeeds. Partition means nodes that stay down or that cannot reach each other.</li>
+      <li>Bounce every node in the data center because two of them are slow. Restart the coordinators that are accumulating hints. Leave the ones that are draining alone.</li>
+      <li>Truncate hints while the latency split remains. The files will return as soon as the next writes time out.</li>
+      <li>Raise timeouts or the hint window so the errors stop. A longer window stores more hints. A longer timeout hides the latency the application is already feeling.</li>
+      <li>Assume the newer data centers are the cause because they were added recently. In this pattern they were not accumulating hints. The path between the older data centers was.</li>
+    </ul>
+
+    <p class="note">Cross-DC latency and hint accumulation interact. The commands above are the long-standing nodetool set. Latency numbers will differ by network. Confirm the split on your hosts before you call it a network problem. This is a decision aid, not a procedure for a specific cluster.</p>
+    <p><a href="../index.html">Back to notes</a></p>
+  </main>
+  <footer>
+    <p>Independent operator notes. Not affiliated with the Apache Software Foundation or DataStax.</p>
+  </footer>
+</body>
+</html>
