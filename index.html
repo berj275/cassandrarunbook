@@ -53,6 +53,20 @@
       <p><a href="notes/add-nodes.html">Read the check order</a></p>
     </article>
 
+    <article class="card">
+      <p class="meta">STARTUP</p>
+      <h2><a href="notes/compaction-txn-log.html">Startup aborted by a compaction transaction log</a></h2>
+      <p>Cassandra will not start if a compaction log and an SSTable disagree on timestamps. Backup the mismatched files, remove them, start the node, then repair the table.</p>
+      <p><a href="notes/compaction-txn-log.html">Read the check order</a></p>
+    </article>
+
+    <article class="card">
+      <p class="meta">HINTS / NETWORK</p>
+      <h2><a href="notes/inter-dc-hints.html">Hints accumulating between data centers</a></h2>
+      <p>Hints pile up on some coordinators while others drain, and describecluster flaps. The cluster is up. The difference is cross-DC latency on specific nodes.</p>
+      <p><a href="notes/inter-dc-hints.html">Read the check order</a></p>
+    </article>
+
     <section class="card">
       <h2>When a new note is up</h2>
       <p>One email when a runbook page is added. No course, no digest.</p>
