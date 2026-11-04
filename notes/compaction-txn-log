@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Startup aborted by a compaction transaction log — Cassandra Runbook</title>
+  <meta name="description" content="What to do when Cassandra refuses to start because a compaction transaction log and an SSTable disagree on timestamps. Backup, remove the mismatched files, start, then repair.">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../index.html">Cassandra <span>Runbook</span></a>
+    <nav>
+      <a href="../index.html">All notes</a>
+    </nav>
+  </header>
+  <main>
+    <p class="meta">NOTE 06 · STARTUP</p>
+    <h1>Startup aborted by a compaction transaction log</h1>
+    <p class="lede">Cassandra will not start if a compaction transaction log says a set of SSTables should be in one state and the files on disk disagree. The usual cause is a compaction that was interrupted, often during an upgrade or a crash. The fix is local to the node. Do not wipe the table directory.</p>
+
+    <h2>What you are looking at</h2>
+    <p>On startup, Cassandra reads the transaction logs under the table directory. A compaction log records which SSTables were inputs and which were outputs. If the log has a COMMIT but one of the old SSTables has a different modification time than the log expects, Cassandra treats the disk as inconsistent and aborts. The log includes the transaction contents. The line that matters is the one marked unexpected:</p>
+    <pre><code>Unexpected disk state: failed to read transaction log [bb_txn_compaction_<uuid>.log in /var/lib/cassandra/data/<keyspace>/<table>-<id>]
+Files and contents follow:
+...
+REMOVE:[.../bb-<generation>-bti-,<mtime>,20][<size>]
+***Unexpected files detected for sstable [bb-<generation>-bti-]: last update time [21:59:22] should have been [22:03:20]
+...
+COMMIT:[,0,0][<timestamp>]</code></pre>
+    <p>The node is down. The other replicas are still serving. This is not a cluster-wide schema or streaming problem. The ADD lines are the new SSTables the compaction produced. The REMOVE lines are the old ones it intended to delete. One of those old files has an mtime that does not match the log, so Cassandra will not finish the cleanup.</p>
+
+    <h2>Confirm it</h2>
+    <ol>
+      <li>The node is stopped. Do not start it again until the files are handled. A second start will hit the same check.</li>
+      <li>In the table directory named in the log, find the transaction log file and the SSTable it names. The SSTable is a set of files with the same generation prefix (<code>bb-4240389-bti-Data.db</code>, <code>-Statistics.db</code>, and the rest).</li>
+      <li>Check that the other SSTables for the table are present and that the data directory is otherwise intact. You are removing one generation and one log, not the table.</li>
+    </ol>
+
+    <h2>Backup, then remove, then start</h2>
+    <p>With the node still stopped, copy the mismatched SSTable files and the transaction log to a directory outside the data path. A temporary folder on the same host is enough. You are keeping a copy in case the removal was wrong.</p>
+    <p>Then remove, from the table directory only:</p>
+    <ul>
+      <li>Every file for the SSTable generation named in the error.</li>
+      <li>The <code>bb_txn_compaction_*.log</code> file named in the error.</li>
+    </ul>
+    <p>Leave every other SSTable and every other transaction log. Start Cassandra normally. If startup succeeds, the transaction log is no longer blocking. The node will rejoin and stream or repair as needed to cover the data that was in the removed SSTable.</p>
+    <p>After the node is <code>UN</code>, run a repair of the affected table, or let your normal repair schedule cover it. A primary-range repair of that table is enough if you want to force it:</p>
+    <pre><code>nodetool repair -pr <keyspace> <table></code></pre>
+    <p>The removed SSTable was an input to a compaction that did not finish cleanly. The other replicas still have the data. Repair fills this node. You do not need to restore the files you set aside unless startup fails for a different reason.</p>
+
+    <h2>Done when</h2>
+    <p>The node starts and reaches <code>UN</code>. The error does not reappear in the log. A repair of the table has been run, or is on the normal schedule. The backup copy of the removed files can be deleted after the node has been up and repaired.</p>
+
+    <h2>Do not</h2>
+    <ul>
+      <li>Delete the entire table directory. You will drop every SSTable for that table on this node and force a full rebuild.</li>
+      <li>Start the node while the mismatched SSTable and the transaction log are still in place. The check will fail again.</li>
+      <li>Remove transaction logs that are not named in the error. Other logs may belong to compactions that are still valid.</li>
+      <li>Treat this as a problem in the other data center. The disk state is local. The other DC does not have this transaction log.</li>
+      <li>Restore the removed SSTable after the node has started. The log that described it is gone. Putting the file back creates a new mismatch.</li>
+    </ul>
+
+    <p class="note">Transaction log names and the exact timestamp check differ by version. The pattern is the same: a compaction log and an SSTable that disagree, on a node that will not start. Confirm the file names against the log on the node you are fixing. This is a decision aid, not a procedure for a specific cluster.</p>
+    <p><a href="../index.html">Back to notes</a></p>
+  </main>
+  <footer>
+    <p>Independent operator notes. Not affiliated with the Apache Software Foundation or DataStax.</p>
+  </footer>
+</body>
+</html>
