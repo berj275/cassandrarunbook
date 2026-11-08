@@ -67,6 +67,13 @@
       <p><a href="notes/inter-dc-hints.html">Read the check order</a></p>
     </article>
 
+    <article class="card">
+      <p class="meta">SAI INDEX</p>
+      <h2><a href="notes/sai-large-in.html">ReadFailure from a large IN on an SAI column</a></h2>
+      <p>A large IN against an SAI-indexed clustering column, with no partition key, makes every replica do expensive index work. The index is up. The query is the problem. Do not rebuild it.</p>
+      <p><a href="notes/sai-large-in.html">Read the check order</a></p>
+    </article>
+
     <section class="card">
       <h2>When a new note is up</h2>
       <p>One email when a runbook page is added. No course, no digest.</p>
@@ -79,6 +86,7 @@
   </main>
   <footer>
     <p>Independent notes for Cassandra operators. Not affiliated with the Apache Software Foundation or DataStax.</p>
+    <p><a href="mailto:notes@cassandrarunbook.com">notes@cassandrarunbook.com</a></p>
   </footer>
 </body>
 </html>
