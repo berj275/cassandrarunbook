@@ -36,7 +36,7 @@
     <p>The fix is in the query or the data model, not in a nodetool command on the index.</p>
     <ul>
       <li>Supply the partition key when the application has it. The same SAI lookup restricted to one partition is a different and cheaper query.</li>
-      <li>Break a large <code>IN</code> into smaller batches from the client and run them concurrently, if the application can assemble the results. A list of 11 is already a candidate. A list of hundreds is the same problem at higher cost.</li>
+      <li>Break a large <code>IN</code> into smaller batches from the client and run them concurrently, if the application can assemble the results. A list of 10 is already a candidate. A list of hundreds is the same problem at higher cost.</li>
       <li>If access by that clustering column is the dominant pattern, the table is missing a query-shaped partition key. Denormalize. An SAI index on a clustering column is a convenience for occasional lookups, not a substitute for a partition key.</li>
     </ul>
     <p>Compaction that reduces the SSTable count lowers the cost of the index lookup. It does not make a large <code>IN</code> without a partition key a good query. Treat compaction as relief, not the design fix.</p>
