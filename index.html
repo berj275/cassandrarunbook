@@ -69,9 +69,16 @@
 
     <article class="card">
       <p class="meta">SAI INDEX</p>
-      <h2><a href="notes/sai-large-in.html">ReadFailure from a large IN clause on an SAI column</a></h2>
-      <p>A large IN clause against an SAI-indexed clustering column, with no partition key, makes every replica do expensive index work. The index is up. The query is the problem. Do not rebuild it.</p>
+      <h2><a href="notes/sai-large-in.html">ReadFailure from a large IN on an SAI column</a></h2>
+      <p>A large IN against an SAI-indexed clustering column, with no partition key, makes every replica do expensive index work. The index is up. The query is the problem. Do not rebuild it.</p>
       <p><a href="notes/sai-large-in.html">Read the check order</a></p>
+    </article>
+
+    <article class="card">
+      <p class="meta">CPU / STREAMING</p>
+      <h2><a href="notes/stream-serializ-cpu.html">High CPU from Stream-Serializ threads</a></h2>
+      <p>A node stays hot after a repair or topology change. Compaction and netstats are quiet. The hot threads are Stream-Serializ. Wait if it is still progressing. Restart if it is stuck.</p>
+      <p><a href="notes/stream-serializ-cpu.html">Read the check order</a></p>
     </article>
 
     <section class="card">
