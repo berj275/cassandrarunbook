@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>High CPU from Stream-Serializ threads — Cassandra Runbook</title>
+  <meta name="description" content="What to check when a Cassandra node stays at high CPU after a repair or topology change, with Stream-Serializ threads hot and netstats empty.">
+  <link rel="stylesheet" href="../style.css">
+</head>
+<body>
+  <header>
+    <a class="brand" href="../index.html">Cassandra <span>Runbook</span></a>
+    <nav>
+      <a href="../index.html">All notes</a>
+    </nav>
+  </header>
+  <main>
+    <p class="meta">NOTE 09 · CPU / STREAMING</p>
+    <h1>High CPU from Stream-Serializ threads</h1>
+    <p class="lede">A node stays at high CPU after a repair or a topology change. Compaction and netstats are quiet. The hot threads are <code>Stream-Serializ</code>. This is residual work from streaming, not a new failure.</p>
+
+    <h2>What you are looking at</h2>
+    <p>The Cassandra process is the top consumer, often 80–100% on a small core count. <code>nodetool compactionstats</code> and <code>nodetool netstats</code> show nothing active. <code>top -H</code> on the process shows <code>Stream-Serializ</code> or <code>Stream-Deserial</code> as the hottest threads. Logs from the same period may still mention Merkle trees or repair. Cluster status is otherwise healthy. No error is required for this to happen.</p>
+    <p>The main streaming sessions can finish and disappear from <code>netstats</code> while the serializer threads continue finishing Merkle trees or cleanup. On eight cores or fewer the residual work is obvious as high overall CPU and elevated load average. On a larger machine it can be one hot thread among many and easier to miss.</p>
+
+    <h2>Confirm it</h2>
+    <ol>
+      <li>On the hot node, identify the threads:
+        <pre><code>top -H -p $(pgrep -f CassandraDaemon | head -1)</code></pre>
+        Sort by CPU. <code>Stream-Serializ</code> or <code>Stream-Deserial</code> as the top entries is the signature.</li>
+      <li>Re-check the usual suspects. Empty or near-empty is expected here:
+        <pre><code>nodetool compactionstats
+nodetool netstats -H
+nodetool tpstats</code></pre>
+      </li>
+      <li>Look at recent log activity for the same period:
+        <pre><code>grep -E "merkle|Merkle|STREAM|repair" /var/log/cassandra/system.log | tail -30</code></pre>
+        Ongoing Merkle-tree sends or late repair messages confirm the source.</li>
+      <li>Note the core count with <code>lscpu</code> or <code>nproc</code>. Fewer cores make the residual work visible as high overall CPU.</li>
+    </ol>
+
+    <h2>What to do</h2>
+    <ul>
+      <li>If Merkle or repair log lines are still advancing and client latency is acceptable, wait 10–30 minutes and re-check <code>top -H</code>. Many cases quiet down once the remaining trees are sent.</li>
+      <li>If the threads stay pegged, the logs show no progress, or applications are affected, restart the Cassandra process on that node. The residual threads die with the JVM. CPU drops immediately.</li>
+      <li>If you need to reduce impact without a restart, temporarily lower outbound stream throughput:
+        <pre><code>nodetool setstreamthroughput 50</code></pre>
+        Use a lower number if 50 is still too much. Restore the previous value after the node settles. Do not leave it lowered permanently unless you have measured that the default is too aggressive for the hardware.</li>
+    </ul>
+    <p>After a restart, confirm the node is <code>UN</code>, <code>netstats</code> is empty, and <code>top -H</code> no longer shows hot <code>Stream-*</code> threads. Overall CPU should return to the normal range for the workload.</p>
+
+    <h2>Done when</h2>
+    <p>The <code>Stream-Serializ</code> threads are gone or idle and node CPU is back to its baseline. Cluster status remains healthy. If the high CPU followed a data-center addition or a large repair, verify the new nodes are <code>UN</code> and that no large streaming or compaction backlog remains on them.</p>
+
+    <h2>Do not</h2>
+    <ul>
+      <li>Treat an empty <code>netstats</code> as proof nothing streaming-related is still running. The serializer threads can outlive the session visibility.</li>
+      <li>Run additional repairs or cleanups on the hot node while the threads are pegged. You add load to an already saturated process.</li>
+      <li>Assume a permanent bug or a stuck thread that requires more than a restart. In the common case after a repair or a topology change, a restart clears it.</li>
+      <li>Leave a lowered <code>streamthroughput</code> in place permanently unless you have measured that the default is too aggressive for the hardware.</li>
+    </ul>
+
+    <p class="note">Streaming and Merkle-tree behavior differ slightly by version. The thread names and the pattern (high CPU, empty netstats, recent topology or repair work) are consistent. This is a decision aid, not a procedure for a specific cluster.</p>
+    <p><a href="../index.html">Back to notes</a></p>
+  </main>
+  <footer>
+    <p>Independent operator notes. Not affiliated with the Apache Software Foundation or DataStax.</p>
+  </footer>
+</body>
+</html>
